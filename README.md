@@ -1,6 +1,6 @@
-# Next.js App Template
+# Statuspage
 
-A Next.js app template.
+A statuspage for my homelab
 
 ## Commands
 
