@@ -48,7 +48,15 @@ function StateBadge({ state }: { state: string }) {
   );
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 export function ServiceStatusCard({ service }: { service: ServiceInfo }) {
+  const hasStats = service.cpuPercent !== undefined;
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -62,6 +70,15 @@ export function ServiceStatusCard({ service }: { service: ServiceInfo }) {
       <CardContent className="text-sm text-muted-foreground space-y-1">
         <p>{service.status}</p>
         <p className="truncate font-mono text-xs">{service.image}</p>
+        {hasStats && (
+          <div className="flex gap-4 pt-1 text-xs font-mono">
+            <span>CPU {service.cpuPercent!.toFixed(1)}%</span>
+            <span>
+              MEM {formatBytes(service.memUsageBytes!)}
+              {service.memLimitBytes ? ` / ${formatBytes(service.memLimitBytes)}` : ""}
+            </span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -15,6 +15,9 @@ export type ServiceInfo = {
   state: ContainerState;
   status: string;
   image: string;
+  cpuPercent?: number;
+  memUsageBytes?: number;
+  memLimitBytes?: number;
 };
 
 export type ProjectGroup = {
@@ -24,12 +27,48 @@ export type ProjectGroup = {
 
 const docker = new Docker();
 
+async function fetchStats(
+  containerId: string,
+): Promise<{ cpuPercent: number; memUsageBytes: number; memLimitBytes: number } | null> {
+  try {
+    const container = docker.getContainer(containerId);
+    const stats = await container.stats({ stream: false }) as any;
+
+    const cpuDelta =
+      stats.cpu_stats.cpu_usage.total_usage -
+      stats.precpu_stats.cpu_usage.total_usage;
+    const systemDelta =
+      stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
+    const numCpus =
+      stats.cpu_stats.online_cpus ??
+      stats.cpu_stats.cpu_usage.percpu_usage?.length ??
+      1;
+    const cpuPercent =
+      systemDelta > 0 ? (cpuDelta / systemDelta) * numCpus * 100 : 0;
+
+    const memUsageBytes =
+      stats.memory_stats.usage - (stats.memory_stats.stats?.cache ?? 0);
+    const memLimitBytes = stats.memory_stats.limit;
+
+    return { cpuPercent, memUsageBytes, memLimitBytes };
+  } catch {
+    return null;
+  }
+}
+
 export async function getComposeGroups(): Promise<ProjectGroup[]> {
-  const containers = await docker.listContainers({ all: true });
+  const containers = await docker.listContainers();
 
   const groups = new Map<string, ServiceInfo[]>();
 
-  for (const c of containers) {
+  const statsResults = await Promise.all(
+    containers.map((c) =>
+      c.State === "running" ? fetchStats(c.Id) : Promise.resolve(null),
+    ),
+  );
+
+  for (let i = 0; i < containers.length; i++) {
+    const c = containers[i];
     const labels = c.Labels ?? {};
     const project = labels["com.docker.compose.project"];
     if (!project) continue;
@@ -37,6 +76,7 @@ export async function getComposeGroups(): Promise<ProjectGroup[]> {
     const service =
       labels["com.docker.compose.service"] ?? c.Names[0]?.replace("/", "");
     const containerName = c.Names[0]?.replace("/", "") ?? c.Id.slice(0, 12);
+    const usage = statsResults[i];
 
     const info: ServiceInfo = {
       service,
@@ -44,6 +84,7 @@ export async function getComposeGroups(): Promise<ProjectGroup[]> {
       state: c.State as ContainerState,
       status: c.Status,
       image: c.Image,
+      ...(usage ?? {}),
     };
 
     const existing = groups.get(project) ?? [];

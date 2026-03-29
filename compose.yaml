@@ -5,3 +5,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
