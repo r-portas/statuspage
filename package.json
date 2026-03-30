@@ -25,13 +25,13 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/dockerode": "^4.0.1",
-    "@types/node": "^20",
+    "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "oxfmt": "^0.42.0",
     "oxlint": "^1.57.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^6"
   },
   "ignoreScripts": [
     "sharp",
