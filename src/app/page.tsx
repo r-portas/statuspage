@@ -1,7 +1,8 @@
-import { headers } from "next/headers";
 import { Box, Cpu, ExternalLink, HardDrive } from "lucide-react";
+import { headers } from "next/headers";
+import { Suspense } from "react";
 
-import { getComposeGroups, type ContainerState, type ServiceInfo } from "@/lib/docker";
+import { getComposeGroups, fetchStats, type ContainerState, type ServiceInfo } from "@/lib/docker";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -9,10 +10,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-const STATE_STYLES: Record<
-  ContainerState,
-  { dot: string; badge: string; label: string }
-> = {
+const STATE_STYLES: Record<ContainerState, { dot: string; badge: string; label: string }> = {
   running: {
     dot: "bg-green-500",
     badge: "border-green-500/20 bg-green-500/10 text-green-400",
@@ -50,6 +48,24 @@ const STATE_STYLES: Record<
   },
 };
 
+async function StatsDisplay({ containerId }: { containerId: string }) {
+  const stats = await fetchStats(containerId);
+  if (!stats) return null;
+
+  return (
+    <div className="text-muted-foreground flex gap-4 text-xs">
+      <span className="flex items-center gap-1">
+        <Cpu className="size-3" />
+        {stats.cpuPercent.toFixed(1)}%
+      </span>
+      <span className="flex items-center gap-1">
+        <HardDrive className="size-3" />
+        {formatBytes(stats.memUsageBytes)} / {formatBytes(stats.memLimitBytes)}
+      </span>
+    </div>
+  );
+}
+
 function ServiceCard({ service, href }: { service: ServiceInfo; href?: string }) {
   const state = STATE_STYLES[service.state] ?? STATE_STYLES.created;
 
@@ -58,9 +74,7 @@ function ServiceCard({ service, href }: { service: ServiceInfo; href?: string })
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{service.service}</p>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {service.containerName}
-          </p>
+          <p className="text-muted-foreground mt-0.5 truncate text-xs">{service.containerName}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <span
@@ -69,35 +83,28 @@ function ServiceCard({ service, href }: { service: ServiceInfo; href?: string })
             <span className={`size-1.5 rounded-full ${state.dot}`} />
             {state.label}
           </span>
-          {href && <ExternalLink className="size-3 text-muted-foreground" />}
+          {href && <ExternalLink className="text-muted-foreground size-3" />}
         </div>
       </div>
 
-      <p className="truncate text-xs text-muted-foreground">{service.image}</p>
+      <p className="text-muted-foreground truncate text-xs">{service.image}</p>
 
-      {(service.cpuPercent !== undefined || service.memUsageBytes !== undefined) && (
-        <div className="flex gap-4 text-xs text-muted-foreground">
-          {service.cpuPercent !== undefined && (
-            <span className="flex items-center gap-1">
-              <Cpu className="size-3" />
-              {service.cpuPercent.toFixed(1)}%
-            </span>
-          )}
-          {service.memUsageBytes !== undefined && service.memLimitBytes !== undefined && (
-            <span className="flex items-center gap-1">
-              <HardDrive className="size-3" />
-              {formatBytes(service.memUsageBytes)} / {formatBytes(service.memLimitBytes)}
-            </span>
-          )}
-        </div>
-      )}
+      <Suspense
+        fallback={
+          <div className="flex gap-4">
+            <span className="bg-muted h-3 w-12 animate-pulse rounded" />
+            <span className="bg-muted h-3 w-28 animate-pulse rounded" />
+          </div>
+        }
+      >
+        <StatsDisplay containerId={service.containerId} />
+      </Suspense>
 
-      <p className="text-xs text-muted-foreground">{service.status}</p>
+      <p className="text-muted-foreground text-xs">{service.status}</p>
     </>
   );
 
-  const cardClass =
-    "flex flex-col gap-3 rounded-lg border border-border bg-card p-4";
+  const cardClass = "flex flex-col gap-3 rounded-lg border border-border bg-card p-4";
 
   if (href) {
     return (
@@ -105,7 +112,7 @@ function ServiceCard({ service, href }: { service: ServiceInfo; href?: string })
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className={`${cardClass} transition-colors hover:border-border/80 hover:bg-card/80`}
+        className={`${cardClass} hover:border-border/80 hover:bg-card/80 transition-colors`}
       >
         {inner}
       </a>
@@ -126,13 +133,13 @@ export default async function Home() {
     <main className="mx-auto w-full max-w-6xl flex-1 p-6">
       <div className="mb-8 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Status</h1>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Updated at {new Date().toLocaleTimeString()}
         </p>
       </div>
 
       {groups.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 py-24 text-muted-foreground">
+        <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-24">
           <Box className="size-8 opacity-40" />
           <p className="text-sm">No Docker Compose projects found</p>
         </div>
@@ -142,19 +149,15 @@ export default async function Home() {
             <section key={group.project}>
               <div className="mb-4 flex items-center gap-2">
                 <h2 className="text-sm font-medium">{group.project}</h2>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-muted-foreground text-xs">
                   {group.services.length} service
                   {group.services.length !== 1 ? "s" : ""}
                 </span>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {group.services.map((service) => {
-                  const href = service.port
-                    ? `${proto}://${hostname}:${service.port}`
-                    : undefined;
-                  return (
-                    <ServiceCard key={service.containerName} service={service} href={href} />
-                  );
+                  const href = service.port ? `${proto}://${hostname}:${service.port}` : undefined;
+                  return <ServiceCard key={service.containerName} service={service} href={href} />;
                 })}
               </div>
             </section>
