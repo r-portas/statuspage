@@ -18,6 +18,7 @@ export type ServiceInfo = {
   cpuPercent?: number;
   memUsageBytes?: number;
   memLimitBytes?: number;
+  port?: number;
 };
 
 export type ProjectGroup = {
@@ -67,6 +68,9 @@ export async function getComposeGroups(): Promise<ProjectGroup[]> {
     const containerName = c.Names[0]?.replace("/", "") ?? c.Id.slice(0, 12);
     const usage = statsResults[i];
 
+    const hrefLabel = labels["homepage.href"];
+    const port = hrefLabel ? Number(/(\d+)$/.exec(hrefLabel)?.[1]) || undefined : undefined;
+
     const info: ServiceInfo = {
       service,
       containerName,
@@ -74,6 +78,7 @@ export async function getComposeGroups(): Promise<ProjectGroup[]> {
       status: c.Status,
       image: c.Image,
       ...(usage ?? {}),
+      port,
     };
 
     const existing = groups.get(project) ?? [];

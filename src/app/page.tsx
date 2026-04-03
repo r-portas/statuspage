@@ -1,4 +1,5 @@
-import { Box, Cpu, HardDrive } from "lucide-react";
+import { headers } from "next/headers";
+import { Box, Cpu, ExternalLink, HardDrive } from "lucide-react";
 
 import { getComposeGroups, type ContainerState, type ServiceInfo } from "@/lib/docker";
 
@@ -49,11 +50,11 @@ const STATE_STYLES: Record<
   },
 };
 
-function ServiceCard({ service }: { service: ServiceInfo }) {
+function ServiceCard({ service, href }: { service: ServiceInfo; href?: string }) {
   const state = STATE_STYLES[service.state] ?? STATE_STYLES.created;
 
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+  const inner = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{service.service}</p>
@@ -61,12 +62,15 @@ function ServiceCard({ service }: { service: ServiceInfo }) {
             {service.containerName}
           </p>
         </div>
-        <span
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${state.badge}`}
-        >
-          <span className={`size-1.5 rounded-full ${state.dot}`} />
-          {state.label}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${state.badge}`}
+          >
+            <span className={`size-1.5 rounded-full ${state.dot}`} />
+            {state.label}
+          </span>
+          {href && <ExternalLink className="size-3 text-muted-foreground" />}
+        </div>
       </div>
 
       <p className="truncate text-xs text-muted-foreground">{service.image}</p>
@@ -89,12 +93,34 @@ function ServiceCard({ service }: { service: ServiceInfo }) {
       )}
 
       <p className="text-xs text-muted-foreground">{service.status}</p>
-    </div>
+    </>
   );
+
+  const cardClass =
+    "flex flex-col gap-3 rounded-lg border border-border bg-card p-4";
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${cardClass} transition-colors hover:border-border/80 hover:bg-card/80`}
+      >
+        {inner}
+      </a>
+    );
+  }
+
+  return <div className={cardClass}>{inner}</div>;
 }
 
 export default async function Home() {
-  const groups = await getComposeGroups();
+  const [groups, headersList] = await Promise.all([getComposeGroups(), headers()]);
+
+  const host = headersList.get("host") ?? "localhost";
+  const hostname = host.split(":")[0];
+  const proto = headersList.get("x-forwarded-proto") ?? "http";
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 p-6">
@@ -122,9 +148,14 @@ export default async function Home() {
                 </span>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {group.services.map((service) => (
-                  <ServiceCard key={service.containerName} service={service} />
-                ))}
+                {group.services.map((service) => {
+                  const href = service.port
+                    ? `${proto}://${hostname}:${service.port}`
+                    : undefined;
+                  return (
+                    <ServiceCard key={service.containerName} service={service} href={href} />
+                  );
+                })}
               </div>
             </section>
           ))}
